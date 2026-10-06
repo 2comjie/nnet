@@ -1,6 +1,4 @@
-github.com/2comjie/ntool v0.0.0-20261005091301-b4adcbf8d92b h1:1sutZzdhT+4m/R82D+suZXgF64am2E5Oj094jMgAV08=
-github.com/2comjie/ntool v0.0.0-20261005091301-b4adcbf8d92b/go.mod h1:wcak3ne1XB+8u2lPiV/lJ3NW9FL2rbfK+Ts0VaIVkGc=
-github.com/2comjie/ntool v0.1.0 h1:d6bohAdDdbPlYb1w7SlZmsoG159vvjMidsVcGFYjcvQ=
-github.com/2comjie/ntool v0.1.0/go.mod h1:wcak3ne1XB+8u2lPiV/lJ3NW9FL2rbfK+Ts0VaIVkGc=
+github.com/2comjie/ntool v0.1.1 h1:jatznYqB4OyQ9qyvNuNHutCs6/7CDebWOuHZNA3rH8w=
+github.com/2comjie/ntool v0.1.1/go.mod h1:wcak3ne1XB+8u2lPiV/lJ3NW9FL2rbfK+Ts0VaIVkGc=
 golang.org/x/sys v0.48.0 h1:bbX/i/6MgT9BVLM9RT1thmxL04yeTAhbEz4SyadbXoo=
 golang.org/x/sys v0.48.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
