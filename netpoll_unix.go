@@ -118,18 +118,24 @@ func NewEventLoop(onRequest OnRequest, ops ...Option) (EventLoop, error) {
 
 type eventLoop struct {
 	sync.Mutex
-	opts *options
-	svr  *server
-	stop chan error
+	opts   *options
+	svr    *server
+	stop   chan error
+	closed bool
 }
 
 // Serve implements EventLoop.
 func (evl *eventLoop) Serve(ln net.Listener) error {
+	evl.Lock()
+	if evl.closed {
+		evl.Unlock()
+		return ln.Close()
+	}
 	npln, err := ConvertListener(ln)
 	if err != nil {
+		evl.Unlock()
 		return err
 	}
-	evl.Lock()
 	evl.svr = newServer(npln, evl.opts, evl.quit)
 	evl.svr.Run()
 	evl.Unlock()
@@ -143,6 +149,7 @@ func (evl *eventLoop) Serve(ln net.Listener) error {
 // Shutdown signals a shutdown a begins server closing.
 func (evl *eventLoop) Shutdown(ctx context.Context) error {
 	evl.Lock()
+	evl.closed = true
 	svr := evl.svr
 	evl.svr = nil
 	evl.Unlock()

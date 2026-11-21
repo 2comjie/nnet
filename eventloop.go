@@ -6,7 +6,9 @@ import (
 )
 
 type EventLoop interface {
+	// Serve closes ln immediately if Shutdown was already called
 	Serve(ln net.Listener) error
+	// Shutdown permanently stops this loop, including before Serve starts
 	Shutdown(ctx context.Context) error
 }
 
