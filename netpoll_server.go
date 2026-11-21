@@ -19,11 +19,13 @@ package nnet
 import (
 	"context"
 	"errors"
-	"github.com/2comjie/ntool/logx"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/2comjie/ntool/logx"
 )
 
 // newServer wrap listener into server, quit will be invoked when server exit.
@@ -41,6 +43,7 @@ type server struct {
 	opts        *options
 	onQuit      func(err error)
 	connections sync.Map // key=fd, value=connection
+	stopping    atomic.Bool
 }
 
 // Run this server.
@@ -60,12 +63,25 @@ func (s *server) Run() (err error) {
 
 // Close this server with deadline.
 func (s *server) Close(ctx context.Context) error {
+	s.stopping.Store(true)
 	s.operator.Control(PollDetach)
 	s.ln.Close()
 
 	for {
 		activeConn := 0
 		s.connections.Range(func(key, value interface{}) bool {
+			if s.opts.tlsConfig != nil {
+				// Wake TLS handshakes and readers blocked on the underlying connection
+				conn := value.(*connection)
+				if conn.IsActive() && conn.isUnlock(flushing) && conn.secure.phase.CompareAndSwap(tlsIdle, tlsClosing) {
+					_ = conn.Close()
+				}
+				_, pending := s.connections.Load(key)
+				if pending {
+					activeConn++
+				}
+				return true
+			}
 			conn, ok := value.(gracefulExit)
 			if !ok || conn.isIdle() {
 				value.(Connection).Close()
@@ -88,6 +104,12 @@ func (s *server) Close(ctx context.Context) error {
 		}
 		select {
 		case <-ctx.Done():
+			if s.opts.tlsConfig != nil {
+				s.connections.Range(func(_, value any) bool {
+					_ = value.(Connection).Close()
+					return true
+				})
+			}
 			return ctx.Err()
 		case <-time.After(waitTime):
 			continue
@@ -173,6 +195,10 @@ func (s *server) onAccept(conn Conn) {
 		return nil
 	})
 	s.connections.Store(fd, nconn)
+	if s.stopping.Load() {
+		_ = nconn.Close()
+		return
+	}
 
 	// trigger onConnect asynchronously
 	nconn.onConnect()

@@ -94,16 +94,24 @@ func (c *connection) AddCloseCallback(callback CloseCallback) error {
 // connection will be registered by this call after preparing.
 func (c *connection) onPrepare(opts *options) (err error) {
 	if opts != nil {
-		c.SetOnConnect(opts.onConnect)
-		c.SetOnDisconnect(opts.onDisconnect)
-		c.SetOnRequest(opts.onRequest)
 		c.SetReadTimeout(opts.readTimeout)
 		c.SetWriteTimeout(opts.writeTimeout)
 		c.SetIdleTimeout(opts.idleTimeout)
 
+		var conn Connection = c
+		if opts.tlsConfig != nil {
+			c.secure = newTLSConnection(c, opts)
+			c.SetOnConnect(c.secure.connect)
+			conn = c.secure
+		} else {
+			c.SetOnConnect(opts.onConnect)
+			c.SetOnDisconnect(opts.onDisconnect)
+			c.SetOnRequest(opts.onRequest)
+		}
+
 		// calling prepare first and then register.
 		if opts.onPrepare != nil {
-			c.ctx = opts.onPrepare(c)
+			c.ctx = opts.onPrepare(conn)
 		}
 	}
 
@@ -211,22 +219,22 @@ func (c *connection) onProcess(onConnect OnConnect, onRequest OnRequest) (proces
 			c.unlock(connecting)
 		}
 	START:
-		// The `onRequest` must be executed at least once if conn have any readable data,
-		// which is in order to cover the `send & close by peer` case.
-		if onRequest != nil && c.Reader().Len() > 0 {
-			_ = onRequest(c.ctx, c)
-		}
-		// The processing loop must ensure that the connection meets `IsActive`.
-		// `onRequest` must either eventually read all the input data or actively Close the connection,
-		// otherwise the goroutine will fall into a dead loop.
 		var closedBy who
-		for {
+		if c.secure != nil {
+			c.secure.process(c.ctx)
 			closedBy = c.status(closing)
-			// close by user or not processable
-			if closedBy == user || onRequest == nil || c.Reader().Len() == 0 {
-				break
+		} else {
+			// Process pending data even when the peer sent data and closed
+			if onRequest != nil && c.Reader().Len() > 0 {
+				_ = onRequest(c.ctx, c)
 			}
-			_ = onRequest(c.ctx, c)
+			for {
+				closedBy = c.status(closing)
+				if closedBy == user || onRequest == nil || c.Reader().Len() == 0 {
+					break
+				}
+				_ = onRequest(c.ctx, c)
+			}
 		}
 		// handling callback if connection has been closed.
 		if closedBy != none {
@@ -251,8 +259,12 @@ func (c *connection) onProcess(onConnect OnConnect, onRequest OnRequest) (proces
 			panicked = false
 			return
 		}
-		// double check is processable
-		if onRequest != nil && c.Reader().Len() > 0 && c.lock(processing) {
+		// A request handler may have been installed while the connection task was exiting
+		pending := onRequest != nil && c.Reader().Len() > 0
+		if c.secure != nil {
+			pending = c.secure.phase.Load() != tlsClosing && c.secure.onRequest.Load() != nil
+		}
+		if pending && c.lock(processing) {
 			goto START
 		}
 		// task exits
@@ -270,6 +282,9 @@ func (c *connection) onProcess(onConnect OnConnect, onRequest OnRequest) (proces
 func (c *connection) closeCallback(needLock, needDetach bool) (err error) {
 	if needLock && !c.lock(processing) {
 		return nil
+	}
+	if c.secure != nil {
+		c.secure.disconnect(c.ctx)
 	}
 	if needDetach && c.operator.poll != nil { // If Close is called during OnPrepare, poll is not registered.
 		// PollDetach only happen when user call conn.Close() or poller detect error

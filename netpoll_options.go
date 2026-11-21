@@ -14,7 +14,10 @@
 
 package nnet
 
-import "time"
+import (
+	"crypto/tls"
+	"time"
+)
 
 // Option .
 type Option struct {
@@ -29,6 +32,15 @@ type options struct {
 	readTimeout  time.Duration
 	writeTimeout time.Duration
 	idleTimeout  time.Duration
+	tlsConfig    *tls.Config
+}
+
+// WithTLSConfig enables server TLS on a TCP listener when config is non-nil
+// OnConnect runs after the handshake, and an OnRequest error closes the TLS connection
+func WithTLSConfig(config *tls.Config) Option {
+	return Option{func(op *options) {
+		op.tlsConfig = config
+	}}
 }
 
 // WithOnPrepare registers the OnPrepare method to EventLoop.

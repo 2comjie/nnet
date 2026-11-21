@@ -103,13 +103,25 @@ func (r *zcReader) ReadByte() (b byte, err error) {
 }
 
 func (r *zcReader) Until(delim byte) (line []byte, err error) {
-	return r.buf.Until(delim)
+	scanned := 0
+	for {
+		index := r.buf.indexByte(delim, scanned)
+		if index >= 0 {
+			return r.buf.Next(index + 1)
+		}
+		scanned = r.buf.Len()
+		err = r.waitRead(scanned + 1)
+		if err != nil {
+			line, _ = r.buf.Next(r.buf.Len())
+			return line, err
+		}
+	}
 }
 
 func (r *zcReader) waitRead(n int) (err error) {
 	for r.buf.Len() < n {
 		err = r.fill(n)
-		if err != nil {
+		if err != nil && r.buf.Len() < n {
 			if err == io.EOF {
 				err = Exception(ErrEOF, "")
 			}

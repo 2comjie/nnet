@@ -87,9 +87,6 @@ func (ln *listener) Accept() (net.Conn, error) {
 
 // Close implements Listener.
 func (ln *listener) Close() error {
-	if ln.fd != 0 {
-		syscall.Close(ln.fd)
-	}
 	if ln.file != nil {
 		ln.file.Close()
 	}
